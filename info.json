@@ -1,7 +1,7 @@
 {
   "name": "hashicorp-vault-kv",
   "label": "HashiCorp Vault KV",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "HashiCorp Vault KV v2 secrets engine connector. Reads, writes, lists and deletes key-value secrets through the KV version 2 mount, using token authentication. Unlike the official read-only hashicorp-vault connector, this connector can WRITE: write_secret creates a new version of a secret, so scheduled rotation flows can push fresh credentials into Vault and let downstream watchers pick up the new version. Operations: read secret (optionally a specific version), write secret, list secrets under a path, delete the latest version of a secret.",
   "publisher": "Fortinet",
   "category": "Analytics and SIEM",
