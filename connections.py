@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Optional
+from urllib.parse import unquote, urlparse
 
 import requests
 
@@ -30,6 +31,39 @@ def normalize_server(server: str) -> str:
     if not (server.startswith('http://') or server.startswith('https://')):
         server = 'https://' + server
     return server
+
+
+def safe_endpoint(endpoint: Any) -> str:
+    """A path on the configured server, or an error.
+
+    A full URL, a `..` segment (also percent-encoded, up to three layers) or a
+    backslash is refused, so the Vault token can never be sent to another host.
+    """
+    endpoint = str(endpoint or '').strip()
+    if not endpoint:
+        raise ConnectorError('Endpoint is required')
+    path = endpoint.split('?')[0]
+    for _ in range(3):
+        path = unquote(path)
+    if urlparse(endpoint).scheme or urlparse(endpoint).netloc or '..' in path.split('/') or '\\' in path:
+        raise ConnectorError('Endpoint must be a path on the configured server, '
+                             'for example /v1/sys/health - not a full URL')
+    return endpoint if endpoint.startswith('/') else '/' + endpoint
+
+
+def json_object(value: Any, name: str) -> Optional[dict]:
+    """A JSON object from a dict or a JSON string; blank means none."""
+    if value in (None, '', {}):
+        return None
+    if isinstance(value, str):
+        import json
+        try:
+            value = json.loads(value)
+        except ValueError:
+            raise ConnectorError('{0} must be valid JSON'.format(name))
+    if not isinstance(value, dict):
+        raise ConnectorError('{0} must be a JSON object'.format(name))
+    return value
 
 
 def parse_secret_data(secret_data: Any) -> dict:
@@ -108,7 +142,17 @@ class VaultClient:
                 resp.text[:200]))
         if not resp.content:
             return {}
-        return resp.json()
+        try:
+            return resp.json()
+        except ValueError:
+            return {'raw': resp.text}
+
+    def raw(self, method: str, endpoint: str, params: Any = None, body: Any = None) -> Any:
+        """Any Vault API call, with this client's token. `/v1` is added when the path lacks it."""
+        path = safe_endpoint(endpoint)
+        if not (path == '/v1' or path.startswith('/v1/')):
+            path = '/v1' + path
+        return self._call(method, self.server + path, params=params, json_body=body)
 
     # - operations -----------------------------------------------------------
 
