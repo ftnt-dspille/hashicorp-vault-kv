@@ -125,12 +125,18 @@ class VaultClient:
         return '{0}/v1/{1}/{2}'.format(self.server, self.mount, path.lstrip('/'))
 
     def _call(self, method: str, url: str, params: Any = None,
-              json_body: Any = None, ok_missing: bool = False) -> Any:
+              json_body: Any = None, ok_missing: bool = False,
+              follow_redirects: bool = True) -> Any:
         try:
             resp = self.session.request(method, url, params=params,
-                                        json=json_body, timeout=self.timeout)
+                                        json=json_body, timeout=self.timeout,
+                                        allow_redirects=follow_redirects)
         except requests.RequestException as err:
             raise ConnectorError('Vault request failed: {0}'.format(err))
+        if not follow_redirects and 300 <= resp.status_code < 400:
+            # The X-Vault-Token header must not follow a redirect to another host.
+            raise ConnectorError('Vault answered with a redirect (HTTP {0}); not following it '
+                                 'so the token stays on the configured server'.format(resp.status_code))
         if resp.status_code == 404 and ok_missing:
             return None
         if resp.status_code == 403:
@@ -152,7 +158,8 @@ class VaultClient:
         path = safe_endpoint(endpoint)
         if not (path == '/v1' or path.startswith('/v1/')):
             path = '/v1' + path
-        return self._call(method, self.server + path, params=params, json_body=body)
+        return self._call(method, self.server + path, params=params, json_body=body,
+                          follow_redirects=False)
 
     # - operations -----------------------------------------------------------
 

@@ -153,3 +153,14 @@ def test_execute_api_request_validates_input(fake, config):
         ops.execute_api_request(config, {'endpoint': '/v1/sys/health', 'request_body': '{nope'})
     with pytest.raises(ConnectorError, match='JSON object'):
         ops.execute_api_request(config, {'endpoint': '/v1/sys/health', 'request_body': '[1]'})
+
+
+def test_execute_api_request_does_not_follow_redirects(fake, config, monkeypatch):
+    import requests
+
+    class Redirect(object):
+        status_code, content, text, headers = 302, b'', '', {'Location': 'http://other.invalid/x'}
+
+    monkeypatch.setattr(requests.Session, 'request', lambda self, *a, **k: (_ for _ in ()).throw(AssertionError) if k.get('allow_redirects', True) else Redirect())
+    with pytest.raises(ConnectorError, match='redirect'):
+        ops.execute_api_request(config, {'endpoint': '/v1/sys/health'})
