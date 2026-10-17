@@ -59,6 +59,26 @@ def safe_endpoint(endpoint: Any) -> str:
     return endpoint if endpoint.startswith('/') else '/' + endpoint
 
 
+def safe_secret_path(path: Any) -> str:
+    """A path inside the mount, or an error.
+
+    Secret paths reach the connector from playbook input (an API body, a folder
+    to search), so a `.` or `..` segment (also percent-encoded, up to three
+    layers), a backslash, `?` or `#` is refused: none can be used to reach
+    another part of the Vault API with the configured token.
+    """
+    text = str(path or '').strip().lstrip('/')
+    decoded = text
+    for _ in range(3):
+        decoded = unquote(decoded)
+    if any(seg in ('.', '..') for seg in decoded.split('/')) or any(c in decoded for c in '\\?#'):
+        raise ConnectorError('Secret path {0!r} is not allowed: no ".", ".." segments, '
+                             'backslashes, "?" or "#"'.format(text))
+    # 'data/' + '/apps/x' must not become data//apps/x
+    joined = '/'.join(seg for seg in text.split('/') if seg)
+    return joined + '/' if text.endswith('/') and joined else joined
+
+
 def json_object(value: Any, name: str) -> Optional[dict]:
     """A JSON object from a dict or a JSON string; blank means none."""
     if value in (None, '', {}):
@@ -130,7 +150,7 @@ class VaultClient:
         self.session.headers['X-Vault-Token'] = self.token
 
     def _url(self, path: str) -> str:
-        return '{0}/v1/{1}/{2}'.format(self.server, self.mount, path.lstrip('/'))
+        return '{0}/v1/{1}/{2}'.format(self.server, self.mount, safe_secret_path(path))
 
     def _call(self, method: str, url: str, params: Any = None,
               json_body: Any = None, ok_missing: bool = False,

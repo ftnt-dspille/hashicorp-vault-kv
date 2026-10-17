@@ -1,5 +1,13 @@
 # hashicorp-vault-kv release notes
 
+## 1.2.1
+
+- A secret path with a `.` or `..` segment (also percent-encoded), a backslash,
+  `?` or `#` is refused before any call. Paths now come from playbook input (an
+  onboarding API body, a folder to search), and none of these may reach another
+  part of the Vault API with the configured token. Applies to every operation
+  that takes a path.
+
 ## 1.2.0
 
 - New operation **Update Secret Fields** (`patch_secret`): change only the

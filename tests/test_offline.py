@@ -297,3 +297,32 @@ def test_read_metadata_missing_ok(fake, config):
     assert ops.read_metadata(config, {'path': 'lab/ai', 'missing_ok': True})['exists'] is True
     with pytest.raises(ConnectorError):
         ops.read_metadata(config, {'path': 'apps/none'})
+
+
+BAD_PATHS = ['../sys/policies/acl/x', 'lab/../../sys/mounts', 'lab/./ai', '..', '%2e%2e/sys/mounts',
+             '%252e%252e/sys', 'lab\\..\\sys', 'lab/ai?list=true', 'lab/ai#x']
+
+
+@pytest.mark.parametrize('bad', BAD_PATHS)
+def test_a_secret_path_cannot_leave_the_mount(fake, config, bad):
+    """Paths come from playbook input (an onboarding API body, a folder to search)."""
+    calls = [
+        lambda: ops.read_secret(config, {'path': bad}),
+        lambda: ops.write_secret(config, {'path': bad, 'secret_data': {'a': 'b'}}),
+        lambda: ops.patch_secret(config, {'path': bad, 'secret_data': {'a': 'b'}, 'retries': '0'}),
+        lambda: ops.read_metadata(config, {'path': bad, 'missing_ok': True}),
+        lambda: ops.patch_metadata(config, {'path': bad, 'custom_metadata': {'a': 'b'}}),
+        lambda: ops.find_secrets_by_metadata(config, {'path': bad, 'metadata_key': 'k'}),
+        lambda: ops.list_secrets(config, {'path': bad}),
+        lambda: ops.delete_secret(config, {'path': bad}),
+    ]
+    for call in calls:
+        with pytest.raises(ConnectorError, match='is not allowed'):
+            call()
+    assert fake.requests == []
+
+
+def test_ordinary_paths_still_work(fake, config):
+    _seed(fake, 'apps/team-a/my.app-1', tag='k1')
+    assert ops.read_metadata(config, {'path': '/apps/team-a/my.app-1'})['custom_metadata']['faig_key_id'] == 'k1'
+    assert ops.find_secrets_by_metadata(config, {'path': 'apps/', 'metadata_key': 'faig_key_id'})['scanned'] == 1

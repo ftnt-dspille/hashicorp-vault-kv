@@ -206,3 +206,11 @@ def test_live_create_only_and_missing_ok(tree):
         ops.write_secret(tree, {'path': path, 'secret_data': {'api_key': 'faig_second'}, 'create_only': True})
     assert ops.read_secret(tree, {'path': path})['data'] == {'api_key': 'faig_first'}
     assert ops.read_metadata(tree, {'path': path, 'missing_ok': True})['exists'] is True
+
+
+@pytest.mark.parametrize('bad', ['../sys/mounts', '%2e%2e/sys/policies/acl', 'lab/ai?list=true'])
+def test_live_a_secret_path_cannot_leave_the_mount(bad):
+    with pytest.raises(ops.ConnectorError, match='is not allowed'):
+        ops.read_secret(_config(), {'path': bad})
+    with pytest.raises(ops.ConnectorError, match='is not allowed'):
+        ops.write_secret(_config(), {'path': bad, 'secret_data': {'a': 'b'}, 'create_only': True})
